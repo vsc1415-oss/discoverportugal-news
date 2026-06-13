@@ -2,36 +2,40 @@
   "updated": "2026-06-13",
   "items": [
     {
-      "date": "June 12, 2026",
-      "title": "Lisbon Tops Europe's Summer City-Break Rankings",
-      "summary": "Lisbon is again among Europe's most-booked city destinations for summer 2026, with strong demand across Alfama, Chiado and Bairro Alto.",
-      "city": "Lisboa",
+      "date": "June 13, 2026",
+      "title": "California of Europe: Vineyards, Resorts and 100 Miles of Coastline",
+      "summary": "A travel feature spotlights Portugal's scenic wine country, luxury resorts and long stretches of Atlantic coastline.",
+      "city": "Portugal",
+      "category": "guides",
       "url": "https://www.visitportugal.com/en",
-      "source": "Visit Portugal"
+      "source": "Travel + Leisure"
     },
     {
-      "date": "June 10, 2026",
-      "title": "Porto Expands Riverside Walking Routes",
-      "summary": "New self-guided cultural trails connect historic landmarks across Porto's UNESCO-listed Ribeira district.",
-      "city": "Porto",
-      "url": "https://www.visitportugal.com/en/destinos/porto-e-norte",
-      "source": "Visit Portugal"
+      "date": "June 13, 2026",
+      "title": "14 Must-Try Portuguese Dishes, from Egg Tarts to Iberian Pork",
+      "summary": "A roundup of essential Portuguese food, from pastel de nata to grilled fish and Iberian pork dishes.",
+      "city": "Lisboa",
+      "category": "restaurants",
+      "url": "https://www.visitportugal.com/en/experiencias/gastronomia-e-vinhos",
+      "source": "Food & Travel"
     },
     {
-      "date": "June 8, 2026",
-      "title": "Algarve Beaches Among Europe's Best for 2026",
-      "summary": "Several Algarve beaches feature in this year's European rankings for water quality and scenery.",
+      "date": "June 13, 2026",
+      "title": "16 Best Beaches in Portugal for Scenic Coastlines and Sun",
+      "summary": "A guide to Portugal's top beaches, highlighting dramatic Algarve cliffs and golden Atlantic shores.",
       "city": "Algarve",
+      "category": "todo",
       "url": "https://www.visitportugal.com/en/destinos/algarve",
-      "source": "Visit Portugal"
+      "source": "Travel Guide"
     },
     {
-      "date": "June 5, 2026",
-      "title": "Sintra Highlights Its Gastronomic Heritage",
-      "summary": "Sintra promotes its historic confectionery — travesseiros and queijadas — with a new food trail across the town.",
-      "city": "Sintra",
-      "url": "https://www.visitportugal.com/en/content/sintra",
-      "source": "Visit Portugal"
+      "date": "June 13, 2026",
+      "title": "Foreign Travel Demand Drives Portugal Tourism Growth",
+      "summary": "International visitor numbers continue to rise, fuelling strong tourism growth across Portugal this season.",
+      "city": "Portugal",
+      "category": "news",
+      "url": "https://www.visitportugal.com/en",
+      "source": "Tourism News"
     }
   ]
 }

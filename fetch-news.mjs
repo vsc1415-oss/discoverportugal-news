@@ -78,9 +78,12 @@ async function summarise(headlines) {
     'Prefer tourism, flights, culture, food, events, openings and travel. Avoid politics, crime, sports and anything not useful to a tourist.\n\n' +
     'For each chosen item return: the original headline number, a clean rewritten title (max ~12 words, no clickbait), ' +
     'a single-sentence factual summary (max 30 words) based ONLY on the headline (do not invent specifics), ' +
-    'and the most relevant city tag from exactly: Lisboa, Porto, Sintra, Cascais, Algarve, Portugal.\n\n' +
+    'the most relevant city tag from exactly: Lisboa, Porto, Sintra, Cascais, Algarve, Portugal, ' +
+    'and the best-fitting category from exactly: restaurants (food/dining), events (festivals/concerts/dates), ' +
+    'todo (beaches/activities/sights to do), guides (itineraries/travel features/where-to), news (everything else: flights, tourism figures, openings, general). ' +
+    'Try to spread items across different categories when it fits.\n\n' +
     'Respond with ONLY valid JSON, no markdown, in this shape:\n' +
-    '{"items":[{"n":3,"title":"...","summary":"...","city":"Lisboa"}]}\n\n' +
+    '{"items":[{"n":3,"title":"...","summary":"...","city":"Lisboa","category":"news"}]}\n\n' +
     'Headlines:\n' + list;
 
   const res = await fetch('https://api.anthropic.com/v1/messages', {
@@ -115,11 +118,14 @@ async function main() {
     .map((p) => {
       const src = headlines[(p.n || 0) - 1];
       if (!src) return null;
+      const allowedCats = ['restaurants', 'events', 'todo', 'guides', 'news'];
+      const category = allowedCats.includes(p.category) ? p.category : 'news';
       return {
         date: fmtDate(src.pubDate),
         title: p.title || src.title,
         summary: p.summary || '',
         city: p.city || 'Portugal',
+        category,
         url: src.link,
         source: src.source || '',
       };
