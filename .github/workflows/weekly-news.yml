@@ -1,0 +1,39 @@
+name: Weekly Portugal news
+
+# Runs every Monday at 06:00 UTC, and can also be triggered manually.
+on:
+  schedule:
+    - cron: '0 6 * * 1'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build-news:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Generate news.json
+        env:
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+        run: node fetch-news.mjs
+
+      - name: Commit if changed
+        run: |
+          git config user.name "news-bot"
+          git config user.email "news-bot@users.noreply.github.com"
+          if [ -n "$(git status --porcelain news.json)" ]; then
+            git add news.json
+            git commit -m "Weekly news update ($(date -u +%Y-%m-%d))"
+            git push
+          else
+            echo "No changes to news.json"
+          fi
