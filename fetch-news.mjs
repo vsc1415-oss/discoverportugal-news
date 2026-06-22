@@ -1,90 +1,48 @@
-// Weekly Portugal travel-news generator.
-// 1. Pulls real headlines from Google News RSS (free, no key).
-// 2. Asks Claude to pick the 4 most relevant items for a Lisbon/Porto/Sintra/
-//    Cascais/Algarve travel audience and write a clean title + 1-sentence summary.
-// 3. Writes news.json (read by the website via the GitHub raw CDN).
+// Weekly evergreen-article generator for DiscoverPortugal.
+// Builds an SEO-focused content library around high-traffic Portugal travel topics.
+// Each run writes a few full articles (title + summary + HTML body) and accumulates
+// them in news.json, which the website renders in the "Weekly Articles" blog.
+// Once all topics exist, it refreshes the oldest ones to keep them current.
 //
-// Required env: ANTHROPIC_API_KEY  (set as a GitHub Actions secret)
+// Required env: ANTHROPIC_API_KEY  (GitHub Actions secret)
 // Run: node fetch-news.mjs
 
-import { writeFileSync } from 'node:fs';
+import { writeFileSync, readFileSync, existsSync } from 'node:fs';
 
 const MODEL = 'claude-haiku-4-5-20251001';
 const OUT = 'news.json';
+const PER_RUN = 3; // how many articles to (re)generate each week
 
-// Google News RSS — real, recent Portugal travel/tourism headlines (last 14 days).
-const FEEDS = [
-  'https://news.google.com/rss/search?q=Portugal%20tourism%20OR%20travel%20when:14d&hl=en-US&gl=US&ceid=US:en',
-  'https://news.google.com/rss/search?q=Lisbon%20OR%20Porto%20OR%20Algarve%20travel%20when:14d&hl=en-US&gl=US&ceid=US:en',
+// High-value, search-friendly topics. category must be one of:
+// restaurants | events | todo | guides | news   (matches the website's blog filters)
+const TOPICS = [
+  { key: 'best-restaurants-lisbon', title: 'Best Restaurants in Lisbon 2026', category: 'restaurants', city: 'Lisboa' },
+  { key: '7-days-portugal',         title: '7 Days in Portugal: The Perfect Itinerary', category: 'guides', city: 'Portugal' },
+  { key: 'where-to-stay-lisbon',    title: 'Where to Stay in Lisbon: Complete Neighbourhood Guide', category: 'guides', city: 'Lisboa' },
+  { key: 'porto-vs-lisbon',         title: 'Porto vs Lisbon: Which City Is Better?', category: 'guides', city: 'Portugal' },
+  { key: 'hidden-gems',             title: '25 Hidden Gems in Portugal', category: 'todo', city: 'Portugal' },
+  { key: 'sintra-day-trip',         title: 'The Ultimate Sintra Day Trip Guide', category: 'guides', city: 'Sintra' },
+  { key: 'best-beaches-algarve',    title: 'Best Beaches in the Algarve', category: 'todo', city: 'Algarve' },
+  { key: 'budget',                  title: 'Portugal Travel Budget: How Much Does a Trip Cost?', category: 'guides', city: 'Portugal' },
+  { key: 'portugal-winter',         title: 'Visiting Portugal in Winter: Weather, Tips & Things to Do', category: 'guides', city: 'Portugal' },
+  { key: 'portugal-summer',         title: 'Visiting Portugal in Summer: Beaches, Festivals & Tips', category: 'guides', city: 'Portugal' },
 ];
 
-function decode(s) {
-  return String(s || '')
-    .replace(/<!\[CDATA\[(.*?)\]\]>/gs, '$1')
-    .replace(/&amp;/g, '&').replace(/&lt;/g, '<').replace(/&gt;/g, '>')
-    .replace(/&#39;/g, "'").replace(/&quot;/g, '"').replace(/&nbsp;/g, ' ')
-    .trim();
-}
-
-function parseRss(xml) {
-  const items = [];
-  const blocks = xml.split('<item>').slice(1);
-  for (const b of blocks) {
-    const get = (tag) => {
-      const m = b.match(new RegExp('<' + tag + '[^>]*>([\\s\\S]*?)</' + tag + '>'));
-      return m ? decode(m[1]) : '';
-    };
-    let title = get('title');
-    const link = get('link');
-    const pubDate = get('pubDate');
-    const source = get('source');
-    // Google News titles end with " - Source"; strip it
-    if (source && title.endsWith(' - ' + source)) title = title.slice(0, -(source.length + 3));
-    if (title && link) items.push({ title, link, pubDate, source });
-  }
-  return items;
-}
-
-async function fetchHeadlines() {
-  const all = [];
-  for (const url of FEEDS) {
-    try {
-      const res = await fetch(url, { headers: { 'User-Agent': 'Mozilla/5.0 DiscoverPortugalNewsBot' } });
-      if (!res.ok) continue;
-      all.push(...parseRss(await res.text()));
-    } catch (e) { /* skip this feed */ }
-  }
-  // De-dupe by title, keep first 25
-  const seen = new Set();
-  return all.filter((it) => {
-    const k = it.title.toLowerCase();
-    if (seen.has(k)) return false;
-    seen.add(k);
-    return true;
-  }).slice(0, 25);
-}
-
-function fmtDate(pubDate) {
-  const d = pubDate ? new Date(pubDate) : new Date();
-  if (isNaN(d)) return '';
-  return d.toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' });
-}
-
-async function summarise(headlines) {
-  const list = headlines.map((h, i) => `${i + 1}. ${h.title} (source: ${h.source || 'news'})`).join('\n');
+async function writeArticle(topic) {
   const prompt =
-    'You are the editor of DiscoverPortugal, a travel guide for Lisbon, Porto, Sintra, Cascais and the Algarve.\n' +
-    'From the real headlines below, pick the 4 MOST relevant and interesting for international travellers planning a trip to Portugal. ' +
-    'Prefer tourism, flights, culture, food, events, openings and travel. Avoid politics, crime, sports and anything not useful to a tourist.\n\n' +
-    'For each chosen item return: the original headline number, a clean rewritten title (max ~12 words, no clickbait), ' +
-    'a single-sentence factual summary (max 30 words) based ONLY on the headline (do not invent specifics), ' +
-    'the most relevant city tag from exactly: Lisboa, Porto, Sintra, Cascais, Algarve, Portugal, ' +
-    'and the best-fitting category from exactly: restaurants (food/dining), events (festivals/concerts/dates), ' +
-    'todo (beaches/activities/sights to do), guides (itineraries/travel features/where-to), news (everything else: flights, tourism figures, openings, general). ' +
-    'Try to spread items across different categories when it fits.\n\n' +
-    'Respond with ONLY valid JSON, no markdown, in this shape:\n' +
-    '{"items":[{"n":3,"title":"...","summary":"...","city":"Lisboa","category":"news"}]}\n\n' +
-    'Headlines:\n' + list;
+    'You are the editor of DiscoverPortugal, a travel guide to Lisbon, Porto, Sintra, Cascais and the Algarve.\n' +
+    'Write an engaging, accurate, SEO-friendly article for international travellers planning a trip to Portugal.\n\n' +
+    'Topic: "' + topic.title + '"\n\n' +
+    'Requirements:\n' +
+    '- A one-sentence meta summary (max 30 words), enticing and keyword-rich.\n' +
+    '- A body of 500-700 words as clean HTML using ONLY these tags: <p>, <h3>, <ul>, <li>, <strong>. ' +
+    'No markdown, no images, no <html>/<head>/<h1>.\n' +
+    '- Open with a short hook paragraph, then use <h3> sub-sections.\n' +
+    '- Be practical and specific: real neighbourhoods, places, dishes, beaches, transport tips. ' +
+    'Give realistic price RANGES (e.g. "€8-15"), never invent exact unstable prices.\n' +
+    '- Friendly local-expert tone. Accurate as of 2026.\n\n' +
+    'Respond with ONLY valid JSON, no markdown fences:\n' +
+    '{"summary":"...","content":"<p>...</p><h3>...</h3>..."}';
 
   const res = await fetch('https://api.anthropic.com/v1/messages', {
     method: 'POST',
@@ -93,54 +51,48 @@ async function summarise(headlines) {
       'x-api-key': process.env.ANTHROPIC_API_KEY,
       'anthropic-version': '2023-06-01',
     },
-    body: JSON.stringify({ model: MODEL, max_tokens: 1200, messages: [{ role: 'user', content: prompt }] }),
+    body: JSON.stringify({ model: MODEL, max_tokens: 3000, messages: [{ role: 'user', content: prompt }] }),
   });
   if (!res.ok) throw new Error('Claude API ' + res.status + ' ' + (await res.text()).slice(0, 200));
   const data = await res.json();
   const text = (data.content || []).map((c) => c.text || '').join('');
-  const jsonStr = text.slice(text.indexOf('{'), text.lastIndexOf('}') + 1);
-  return JSON.parse(jsonStr).items || [];
+  const j = JSON.parse(text.slice(text.indexOf('{'), text.lastIndexOf('}') + 1));
+  return { summary: j.summary || '', content: j.content || '' };
+}
+
+function today() {
+  return new Date().toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' });
 }
 
 async function main() {
-  if (!process.env.ANTHROPIC_API_KEY) {
-    console.error('Missing ANTHROPIC_API_KEY');
-    process.exit(1);
-  }
-  const headlines = await fetchHeadlines();
-  if (!headlines.length) {
-    console.error('No headlines fetched — leaving news.json unchanged.');
-    process.exit(0);
-  }
-  const picks = await summarise(headlines);
+  if (!process.env.ANTHROPIC_API_KEY) { console.error('Missing ANTHROPIC_API_KEY'); process.exit(1); }
 
-  const items = picks
-    .map((p) => {
-      const src = headlines[(p.n || 0) - 1];
-      if (!src) return null;
-      const allowedCats = ['restaurants', 'events', 'todo', 'guides', 'news'];
-      const category = allowedCats.includes(p.category) ? p.category : 'news';
-      return {
-        date: fmtDate(src.pubDate),
-        title: p.title || src.title,
-        summary: p.summary || '',
-        city: p.city || 'Portugal',
-        category,
-        url: src.link,
-        source: src.source || '',
-      };
-    })
-    .filter(Boolean)
-    .slice(0, 4);
+  let existing = [];
+  if (existsSync(OUT)) { try { existing = (JSON.parse(readFileSync(OUT, 'utf8')).items) || []; } catch (e) {} }
+  // Drop any legacy items that aren't part of the topic library (the old RSS news)
+  const byKey = {};
+  existing.forEach((it) => { if (it.key && TOPICS.some((t) => t.key === it.key)) byKey[it.key] = it; });
 
-  if (!items.length) {
-    console.error('No items after processing — leaving news.json unchanged.');
-    process.exit(0);
+  // Generate missing topics first; once all exist, refresh the oldest ones.
+  let queue = TOPICS.filter((t) => !byKey[t.key]);
+  if (queue.length === 0) {
+    queue = [...TOPICS].sort((a, b) => new Date(byKey[a.key].date || 0) - new Date(byKey[b.key].date || 0));
+  }
+  const batch = queue.slice(0, PER_RUN);
+
+  for (const t of batch) {
+    try {
+      const a = await writeArticle(t);
+      byKey[t.key] = { key: t.key, date: today(), title: t.title, summary: a.summary, city: t.city, category: t.category, content: a.content };
+      console.log('Wrote: ' + t.key);
+    } catch (e) { console.log('ERR ' + t.key + ': ' + e.message.slice(0, 100)); }
   }
 
-  const out = { updated: new Date().toISOString().slice(0, 10), items };
-  writeFileSync(OUT, JSON.stringify(out, null, 2) + '\n');
-  console.log('Wrote ' + OUT + ' with ' + items.length + ' items.');
+  const items = Object.values(byKey).sort((a, b) => new Date(b.date) - new Date(a.date));
+  if (!items.length) { console.error('No articles produced — leaving news.json unchanged.'); process.exit(0); }
+
+  writeFileSync(OUT, JSON.stringify({ updated: new Date().toISOString().slice(0, 10), items }, null, 2) + '\n');
+  console.log('Total articles in library: ' + items.length);
 }
 
 main().catch((e) => { console.error(e); process.exit(1); });
