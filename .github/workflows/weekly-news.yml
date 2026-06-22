@@ -9,6 +9,11 @@ on:
 permissions:
   contents: write
 
+# Never let two runs race on the same branch (avoids push conflicts).
+concurrency:
+  group: weekly-news
+  cancel-in-progress: false
+
 jobs:
   build-news:
     runs-on: ubuntu-latest
@@ -33,7 +38,13 @@ jobs:
           if [ -n "$(git status --porcelain news.json)" ]; then
             git add news.json
             git commit -m "Weekly news update ($(date -u +%Y-%m-%d))"
-            git push
+            # Push with rebase + retry in case the branch moved meanwhile
+            for i in 1 2 3; do
+              if git push; then break; fi
+              echo "Push rejected, syncing and retrying ($i)..."
+              git pull --rebase --autostash origin main
+              sleep 3
+            done
           else
             echo "No changes to news.json"
           fi
