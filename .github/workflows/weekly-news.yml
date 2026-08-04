@@ -1,9 +1,9 @@
-name: Weekly Portugal news
+name: Daily Portugal news
 
-# Runs every Monday at 06:00 UTC, and can also be triggered manually.
+# Runs every day at 06:00 UTC, and can also be triggered manually.
 on:
   schedule:
-    - cron: '0 6 * * 1'
+    - cron: '0 6 * * *'
   workflow_dispatch:
 
 permissions:
@@ -11,7 +11,7 @@ permissions:
 
 # Never let two runs race on the same branch (avoids push conflicts).
 concurrency:
-  group: weekly-news
+  group: daily-news
   cancel-in-progress: false
 
 jobs:
@@ -37,7 +37,7 @@ jobs:
           git config user.email "news-bot@users.noreply.github.com"
           if [ -n "$(git status --porcelain news.json)" ]; then
             git add news.json
-            git commit -m "Weekly news update ($(date -u +%Y-%m-%d))"
+            git commit -m "Daily news update ($(date -u +%Y-%m-%d))"
             # Push with rebase + retry in case the branch moved meanwhile
             for i in 1 2 3; do
               if git push; then break; fi
